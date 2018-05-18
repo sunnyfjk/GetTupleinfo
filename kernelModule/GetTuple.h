@@ -2,7 +2,7 @@
  * @Author: fjk
  * @Date:   2018-05-18T10:50:57+08:00
  * @Last modified by:   fjk
- * @Last modified time: 2018-05-18T11:29:32+08:00
+ * @Last modified time: 2018-05-18T15:22:11+08:00
  */
 #ifndef __GET_TUPLE_H__
 #define __GET_TUPLE_H__
@@ -23,7 +23,7 @@
   do {                                                                         \
     printk(KERN_DEBUG "[%s(%s:%d)]" fmt, DRIVER_NAME, __FUNCTION__, __LINE__,  \
            ##args);                                                            \
-  whie(0)
+  } while (0)
 #define PERR(fmt, args...)                                                     \
   do {                                                                         \
     printk(KERN_ERR "[%s(%s:%d)]" fmt, DRIVER_NAME, __FUNCTION__, __LINE__,    \
