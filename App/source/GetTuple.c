@@ -2,9 +2,10 @@
  * @Author: fjk
  * @Date:   2018-05-18T14:47:17+08:00
  * @Last modified by:   fjk
- * @Last modified time: 2018-05-18T19:49:01+08:00
+ * @Last modified time: 2018-05-20T15:19:12+08:00
  */
 #include "../include/GetTuple.h"
+#include <errno.h>
 #include <linux/netlink.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -13,85 +14,176 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
-
-struct ReadGetTupleData_t {
-  int fd;
-  int (*saveGetTupleData)(struct TupleMessage_t *, size_t);
-  struct nlmsghdr *nlhdr;
+struct PthreadControl_t {
+  struct TupleMessage_t td[TUPLE_MESSAGE_DATA];
+  int pos;
+  pthread_mutex_t mutex;
+  pthread_cond_t cond;
+  pthread_t pd;
+  int state;
+  int (*SaveNetLinkReacvData)(struct TupleMessage_t *, int);
 };
+void *SaveWork(void *arg) {
+  struct PthreadControl_t *pc = (struct PthreadControl_t *)arg;
+  if (pc == NULL)
+    return arg;
 
-void *ReadGetTupleDataThread(void *arg) {
-  struct ReadGetTupleData_t *rgtd = (struct ReadGetTupleData_t *)arg;
-  struct sockaddr_nl daddr = {0};
-  struct msghdr msg = {0};
-  struct iovec iov = {0};
-  struct TupleMessage_t *data = NULL;
-  int ret = 0;
   while (1) {
-    memset(rgtd->nlhdr, 0, NLMSG_SPACE(sizeof(struct TupleMessage_t)));
-    iov.iov_base = (void *)rgtd->nlhdr;
-    iov.iov_len = NLMSG_SPACE(sizeof(struct TupleMessage_t));
-    msg.msg_name = (void *)&daddr;
-    msg.msg_namelen = sizeof(daddr);
-    msg.msg_iov = &iov;
-    msg.msg_iovlen = 1;
-    ret = recvmsg(rgtd->fd, &msg, 0);
-    if (ret > 0) {
-      data = (struct TupleMessage_t *)NLMSG_DATA(rgtd->nlhdr);
-      printf("protocol:%#x,src[%#x:%#x],dst[%#x:%#x]\n", data->protocol,
-             data->saddr, data->sport, data->daddr, data->dport);
+    PERR(":run\n");
+    pthread_mutex_lock(&pc->mutex);
+    while (pc->state == STATE_RUN && pc->pos == 0)
+      pthread_cond_wait(&pc->cond, &pc->mutex);
+    if (pc->pos > 0 && pc->SaveNetLinkReacvData != NULL)
+      pc->SaveNetLinkReacvData(pc->td, pc->pos);
+    pc->pos = 0;
+    pthread_cond_signal(&(pc->cond));
+    if (pc->state == STATE_CLOSE) {
+      pthread_mutex_unlock(&pc->mutex);
+      break;
     }
+    pthread_mutex_unlock(&pc->mutex);
   }
-
+  PERR(":close\n");
   return arg;
 };
-
-int OpenGetTuple(void) {
-  int sd;
-  int ret = -1;
-  struct sockaddr_nl saddr;
-  sd = socket(AF_NETLINK, SOCK_RAW, NETLINK_USERSOCK);
-  if (sd < 0)
-    return -1;
-  saddr.nl_family = AF_NETLINK;
-  saddr.nl_pid = getpid();
-  saddr.nl_groups = NETLINK_GET_TUPLE_GROUP;
-  ret = bind(sd, (struct sockaddr *)&saddr, sizeof(saddr));
-  if (ret < 0)
-    return ret;
-  return sd;
-}
-void CloseGetTuple(int fd) { close(fd); }
-
-pthread_t ReadGetTupleData(int fd,
-                           int (*saveGetTupleData)(struct TupleMessage_t *,
-                                                   size_t)) {
+struct PthreadControl_t *PthreadControlCreate(
+    int (*SaveNetLinkReacvData)(struct TupleMessage_t *, int)) {
   int ret = 0;
-  pthread_t pt;
-  struct ReadGetTupleData_t *r;
-  r = (struct ReadGetTupleData_t *)malloc(sizeof(*r));
-  if (r == NULL) {
+  struct PthreadControl_t *pc;
+  pc = (struct PthreadControl_t *)malloc(sizeof(*pc));
+  if (pc == NULL) {
     ret = -1;
-    goto Read_Get_Tuple_Data_malloc_err;
+    goto parameter_error;
   }
-  r->fd = fd;
-  r->saveGetTupleData = saveGetTupleData;
-  r->nlhdr =
-      (struct nlmsghdr *)malloc(NLMSG_SPACE(sizeof(struct TupleMessage_t)));
-  if (r->nlhdr == NULL) {
-    ret = -2;
-    goto nlmsghdr_malloc_err;
-  }
-  ret = pthread_create(&pt, NULL, ReadGetTupleDataThread, r);
+  pc->state = STATE_RUN;
+  pc->pos = 0;
+  pc->SaveNetLinkReacvData = SaveNetLinkReacvData;
+  ret = pthread_cond_init(&pc->cond, NULL);
   if (ret < 0) {
-    ret = -3;
+    goto pthread_cond_init_err;
+  }
+  ret = pthread_mutex_init(&pc->mutex, NULL);
+  if (ret < 0) {
+    goto pthread_mutex_init_err;
+  }
+  ret = pthread_create(&pc->pd, NULL, SaveWork, pc);
+  if (ret < 0) {
     goto pthread_create_err;
   }
-  return pt;
+  return pc;
 pthread_create_err:
-  free(r->nlhdr);
-nlmsghdr_malloc_err:
-  free(r);
-Read_Get_Tuple_Data_malloc_err:
+  pthread_mutex_destroy(&pc->mutex);
+pthread_mutex_init_err:
+  pthread_cond_destroy(&pc->cond);
+pthread_cond_init_err:
+  pc->state = STATE_CLOSE;
+  pc->pos = 0;
+  pc->SaveNetLinkReacvData = NULL;
+  free(pc);
+parameter_error:
+  return NULL;
+}
+void PthreadControlDelete(struct PthreadControl_t *pc) {
+  pc->state = STATE_CLOSE;
+  pthread_cond_broadcast(&pc->cond);
+  pthread_join(pc->pd, NULL);
+  pthread_mutex_destroy(&pc->mutex);
+  pthread_cond_destroy(&pc->cond);
+  free(pc);
+}
+
+int CreateNetLinkSocket(struct NetLinkSocket_t *ns) {
+  int ret = 0;
+  int i = 0, j = 0;
+  struct sockaddr_nl addr = {0};
+  if (ns == NULL) {
+    ret = -1;
+    goto parameter_error;
+  }
+  ns->state = 1;
+  ns->pos = 0;
+  ns->fd = socket(AF_NETLINK, SOCK_RAW, NETLINK_USERSOCK);
+  if (ns->fd < 0) {
+    ret = -2;
+    goto netlink_socket_err;
+  }
+  addr.nl_family = AF_NETLINK;
+  addr.nl_pid = getpid();
+  addr.nl_groups = NETLINK_GET_TUPLE_GROUP;
+  ret = bind(ns->fd, (struct sockaddr *)&addr, sizeof(struct sockaddr_nl));
+  if (ret < 0) {
+    goto netlink_bind_err;
+  }
+  for (i = 0; i < PTHREAD_COND; i++) {
+    ns->cond[i] = PthreadControlCreate(ns->SaveNetLinkReacvData);
+    if (ns->cond[i] == NULL)
+      goto PthreadControlCreate_err;
+  }
+  return 0;
+PthreadControlCreate_err:
+  for (j = 0; j < i; j++)
+    PthreadControlDelete(ns->cond[i]);
+netlink_bind_err:
+  close(ns->fd);
+netlink_socket_err:
+parameter_error:
   return ret;
+}
+int ReacvNetLinkMessage(struct NetLinkSocket_t *ns) {
+  int ret = 0;
+  struct nlmsghdr *nlh = NULL;
+  struct sockaddr_nl src_addr = {0};
+  socklen_t addrlen = sizeof(struct sockaddr_nl);
+  struct PthreadControl_t **cond = (struct PthreadControl_t **)ns->cond;
+  if (ns == NULL || ns->cond == NULL) {
+    ret = -1;
+    goto parameter_error;
+  }
+  nlh = (struct nlmsghdr *)malloc(NLMSG_SPACE(sizeof(struct TupleMessage_t)));
+  if (nlh == NULL) {
+    ret = -2;
+    goto malloc_nlmsghdr_err;
+  }
+  while (ns->state == STATE_RUN) {
+    memset(&src_addr, 0, sizeof(struct sockaddr_nl));
+    memset(nlh, 0, NLMSG_SPACE(sizeof(struct TupleMessage_t)));
+    ret = recvfrom(ns->fd, nlh, NLMSG_SPACE(sizeof(struct TupleMessage_t)), 0,
+                   (struct sockaddr *)&src_addr, (socklen_t *)&addrlen);
+    if (ret < 0 ||
+        ((nlh->nlmsg_len - NLMSG_SPACE(0)) != sizeof(struct TupleMessage_t))) {
+      continue;
+    }
+    pthread_mutex_lock(&(cond[ns->pos]->mutex));
+    while (cond[ns->pos]->pos >= TUPLE_MESSAGE_DATA)
+      pthread_cond_wait(&(cond[ns->pos]->cond), &(cond[ns->pos]->mutex));
+    memcpy((unsigned char *)(&(cond[ns->pos]->td[cond[ns->pos]->pos])),
+           NLMSG_DATA(nlh), nlh->nlmsg_len - NLMSG_SPACE(0));
+    PERR("ns->pos=%d,cond[ns->pos]->pos=%d\n", ns->pos, cond[ns->pos]->pos);
+    ret = 0;
+    cond[ns->pos]->pos++;
+    if (!(cond[ns->pos]->pos < TUPLE_MESSAGE_DATA)) {
+      ret = 1;
+      pthread_cond_signal(&(cond[ns->pos]->cond));
+    }
+    pthread_mutex_unlock(&(cond[ns->pos]->mutex));
+    if (ret == 1) {
+      ns->pos++;
+      if (!(ns->pos < PTHREAD_COND))
+        ns->pos = 0;
+    }
+  }
+  free(nlh);
+  return 0;
+malloc_nlmsghdr_err:
+parameter_error:
+  return ret;
+}
+void DeleteNetLinkSocket(struct NetLinkSocket_t *ns) {
+  int i = 0;
+  if (ns == NULL)
+    return;
+  ns->state = STATE_CLOSE;
+  close(ns->fd);
+  for (i = 0; i < PTHREAD_COND; i++)
+    PthreadControlDelete(ns->cond[i]);
 }

@@ -2,7 +2,7 @@
  * @Author: fjk
  * @Date:   2018-05-18T10:11:21+08:00
  * @Last modified by:   fjk
- * @Last modified time: 2018-05-18T14:43:15+08:00
+ * @Last modified time: 2018-05-20T12:42:14+08:00
  */
 #include "GetTuple.h"
 
@@ -32,6 +32,7 @@ void GetTupleNetLinkRecv(struct sk_buff *skb) {
 unsigned int GetTuple_hookfn(void *priv, struct sk_buff *skb,
                              const struct nf_hook_state *state) {
   struct iphdr *iph = NULL;
+  int ret = 0;
   struct TupleMessage_t tmsg = {0};
   if (IS_ERR_OR_NULL(skb))
     return NF_ACCEPT;
@@ -48,7 +49,10 @@ unsigned int GetTuple_hookfn(void *priv, struct sk_buff *skb,
   PDEBUG("protocol=%d,src[%pI4:%d],dst[%pI4:%d]\n", tmsg.protocol, &tmsg.saddr,
          ntohs(tmsg.sport), &tmsg.daddr, ntohs(tmsg.dport));
 #endif
-  SendTupleMessage(&tmsg);
+  ret = SendTupleMessage(&tmsg);
+  if (ret < 0) {
+    PERR("send tuple message err\n");
+  }
   return NF_ACCEPT;
 }
 
