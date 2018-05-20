@@ -2,7 +2,7 @@
  * @Author: fjk
  * @Date:   2018-05-18T14:46:46+08:00
  * @Last modified by:   fjk
- * @Last modified time: 2018-05-20T15:34:11+08:00
+ * @Last modified time: 2018-05-20T15:39:22+08:00
  */
 #include "include/GetTuple.h"
 #include <arpa/inet.h>
@@ -12,10 +12,13 @@
 #include <unistd.h>
 struct NetLinkSocket_t ns = {0};
 int SaveNetLinkReacvData(struct TupleMessage_t *data, int count) {
+#if defined(__DEBUG__)
   int i = 0;
   char src[16] = {0}, dst[16] = {0};
+#endif
   if (data == NULL)
     return -1;
+#if defined(__DEBUG__)
   PERR("count=%d\n", count);
   for (i = 0; i < count; i++) {
     memset(src, 0, sizeof(src));
@@ -26,6 +29,7 @@ int SaveNetLinkReacvData(struct TupleMessage_t *data, int count) {
          data[i].protocol, src, ntohs(data[i].sport), dst,
          ntohs(data[i].dport));
   }
+#endif
   return 0;
 }
 void CTRL_C(int signum) {

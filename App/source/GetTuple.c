@@ -2,7 +2,7 @@
  * @Author: fjk
  * @Date:   2018-05-18T14:47:17+08:00
  * @Last modified by:   fjk
- * @Last modified time: 2018-05-20T15:19:12+08:00
+ * @Last modified time: 2018-05-20T15:40:07+08:00
  */
 #include "../include/GetTuple.h"
 #include <errno.h>
@@ -29,7 +29,9 @@ void *SaveWork(void *arg) {
     return arg;
 
   while (1) {
+#if defined(__DEBUG__)
     PERR(":run\n");
+#endif
     pthread_mutex_lock(&pc->mutex);
     while (pc->state == STATE_RUN && pc->pos == 0)
       pthread_cond_wait(&pc->cond, &pc->mutex);
@@ -43,7 +45,9 @@ void *SaveWork(void *arg) {
     }
     pthread_mutex_unlock(&pc->mutex);
   }
+#if defined(__DEBUG__)
   PERR(":close\n");
+#endif
   return arg;
 };
 struct PthreadControl_t *PthreadControlCreate(
@@ -158,7 +162,6 @@ int ReacvNetLinkMessage(struct NetLinkSocket_t *ns) {
       pthread_cond_wait(&(cond[ns->pos]->cond), &(cond[ns->pos]->mutex));
     memcpy((unsigned char *)(&(cond[ns->pos]->td[cond[ns->pos]->pos])),
            NLMSG_DATA(nlh), nlh->nlmsg_len - NLMSG_SPACE(0));
-    PERR("ns->pos=%d,cond[ns->pos]->pos=%d\n", ns->pos, cond[ns->pos]->pos);
     ret = 0;
     cond[ns->pos]->pos++;
     if (!(cond[ns->pos]->pos < TUPLE_MESSAGE_DATA)) {
