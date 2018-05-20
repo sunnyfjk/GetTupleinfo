@@ -2,7 +2,7 @@
  * @Author: fjk
  * @Date:   2018-05-18T14:47:11+08:00
  * @Last modified by:   fjk
- * @Last modified time: 2018-05-20T16:10:45+08:00
+ * @Last modified time: 2018-05-20T16:18:52+08:00
  */
 #ifndef __GET_TUPLE_H__
 #define __GET_TUPLE_H__
@@ -10,9 +10,10 @@
 #include <stdint.h>
 #define NETLINK_GET_TUPLE_GROUP (2)
 #define PTHREAD_COND (3)
-#define TUPLE_MESSAGE_DATA (128)
+#define TUPLE_MESSAGE_DATA (10)
 #define STATE_CLOSE (0)
 #define STATE_RUN (1)
+#define MAX_NAME_LEN (100)
 
 #define PERR(fmt, args...)                                                     \
   do {                                                                         \

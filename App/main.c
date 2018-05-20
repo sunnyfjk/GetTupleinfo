@@ -2,7 +2,7 @@
  * @Author: fjk
  * @Date:   2018-05-18T14:46:46+08:00
  * @Last modified by:   fjk
- * @Last modified time: 2018-05-20T16:02:15+08:00
+ * @Last modified time: 2018-05-20T16:25:01+08:00
  */
 #include "include/GetTuple.h"
 #include <arpa/inet.h>
@@ -31,11 +31,12 @@ int SaveNetLinkReacvData(const char *name, struct TupleMessage_t *data,
   fd = open(name, O_APPEND | O_CREAT | O_RDWR, 0660);
   if (fd < 0) {
     ret = fd;
+    PERR("open %s file err\n", name);
     goto open_file_err;
   }
   while (len < all_len) {
 
-    ret = write(fd, data + len, all_len - len);
+    ret = write(fd, (((const char *)data) + len), all_len - len);
     if (ret < 0)
       continue;
     len += ret;

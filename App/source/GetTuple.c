@@ -2,7 +2,7 @@
  * @Author: fjk
  * @Date:   2018-05-18T14:47:17+08:00
  * @Last modified by:   fjk
- * @Last modified time: 2018-05-20T16:07:31+08:00
+ * @Last modified time: 2018-05-20T16:23:26+08:00
  */
 #include "../include/GetTuple.h"
 #include <errno.h>
@@ -15,7 +15,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 struct PthreadControl_t {
-  const char *name;
+  char name[MAX_NAME_LEN];
   struct TupleMessage_t td[TUPLE_MESSAGE_DATA];
   int pos;
   pthread_mutex_t mutex;
@@ -61,7 +61,8 @@ struct PthreadControl_t *PthreadControlCreate(
     ret = -1;
     goto parameter_error;
   }
-  pc->name = name;
+  memcpy(pc->name, name,
+         sizeof(pc->name) > strlen(name) ? strlen(name) : sizeof(pc->name));
   pc->state = STATE_RUN;
   pc->pos = 0;
   pc->SaveNetLinkReacvData = SaveNetLinkReacvData;
@@ -103,7 +104,7 @@ int CreateNetLinkSocket(struct NetLinkSocket_t *ns) {
   int ret = 0;
   int i = 0, j = 0;
   struct sockaddr_nl addr = {0};
-  char name[100];
+  char name[MAX_NAME_LEN];
   if (ns == NULL) {
     ret = -1;
     goto parameter_error;
@@ -123,10 +124,10 @@ int CreateNetLinkSocket(struct NetLinkSocket_t *ns) {
     goto netlink_bind_err;
   }
   if (ns->name == NULL)
-    ns->name = "./Defaule";
+    ns->name = "Defaule";
   for (i = 0; i < PTHREAD_COND; i++) {
     memset(name, 0, sizeof(name));
-    sprintf(name, "Tuple_%s_%d", ns->name, i);
+    snprintf(name, MAX_NAME_LEN, "Tuple_%s_%d", ns->name, i);
     ns->cond[i] = PthreadControlCreate(name, ns->SaveNetLinkReacvData);
     if (ns->cond[i] == NULL)
       goto PthreadControlCreate_err;

@@ -1,7 +1,7 @@
 # @Author: fjk
 # @Date:   2018-05-18T14:46:15+08:00
 # @Last modified by:   fjk
-# @Last modified time: 2018-05-20T16:07:59+08:00
+# @Last modified time: 2018-05-20T16:26:09+08:00
 .PHONY:$(TAGET)
 TAGET 		=	GetTuple
 SRC			=	$(shell find ./ -name "*.c")
