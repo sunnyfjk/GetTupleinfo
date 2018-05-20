@@ -2,7 +2,7 @@
  * @Author: fjk
  * @Date:   2018-05-18T14:47:17+08:00
  * @Last modified by:   fjk
- * @Last modified time: 2018-05-18T16:35:34+08:00
+ * @Last modified time: 2018-05-18T19:49:01+08:00
  */
 #include "../include/GetTuple.h"
 #include <linux/netlink.h>
@@ -16,7 +16,7 @@
 
 struct ReadGetTupleData_t {
   int fd;
-  int (*saveGetTupleData)(struct TupleMessage_t *);
+  int (*saveGetTupleData)(struct TupleMessage_t *, size_t);
   struct nlmsghdr *nlhdr;
 };
 
@@ -64,7 +64,8 @@ int OpenGetTuple(void) {
 void CloseGetTuple(int fd) { close(fd); }
 
 pthread_t ReadGetTupleData(int fd,
-                           int (*saveGetTupleData)(struct TupleMessage_t *)) {
+                           int (*saveGetTupleData)(struct TupleMessage_t *,
+                                                   size_t)) {
   int ret = 0;
   pthread_t pt;
   struct ReadGetTupleData_t *r;

@@ -2,7 +2,7 @@
  * @Author: fjk
  * @Date:   2018-05-18T14:47:11+08:00
  * @Last modified by:   fjk
- * @Last modified time: 2018-05-18T16:14:22+08:00
+ * @Last modified time: 2018-05-18T19:49:27+08:00
  */
 #ifndef __GET_TUPLE_H__
 #define __GET_TUPLE_H__
@@ -16,6 +16,7 @@ struct TupleMessage_t {
 };
 int OpenGetTuple(void);
 void CloseGetTuple(int fd);
-pthread_t
-ReadGetTupleData(int fd, int (*saveGetTupleData)(struct TupleMessage_t *data));
+pthread_t ReadGetTupleData(int fd,
+                           int (*saveGetTupleData)(struct TupleMessage_t *,
+                                                   size_t));
 #endif
