@@ -2,22 +2,46 @@
  * @Author: fjk
  * @Date:   2018-05-18T14:46:46+08:00
  * @Last modified by:   fjk
- * @Last modified time: 2018-05-20T15:39:22+08:00
+ * @Last modified time: 2018-05-20T16:02:15+08:00
  */
 #include "include/GetTuple.h"
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 struct NetLinkSocket_t ns = {0};
-int SaveNetLinkReacvData(struct TupleMessage_t *data, int count) {
+int SaveNetLinkReacvData(const char *name, struct TupleMessage_t *data,
+                         int count) {
 #if defined(__DEBUG__)
   int i = 0;
   char src[16] = {0}, dst[16] = {0};
 #endif
-  if (data == NULL)
+  int fd = 0;
+  int ret = 0;
+  size_t len = 0;
+  size_t all_len = sizeof(struct TupleMessage_t) * count;
+
+  if (data == NULL || name == NULL)
     return -1;
+  /*写入文件 开始*/
+  fd = open(name, O_APPEND | O_CREAT | O_RDWR, 0660);
+  if (fd < 0) {
+    ret = fd;
+    goto open_file_err;
+  }
+  while (len < all_len) {
+
+    ret = write(fd, data + len, all_len - len);
+    if (ret < 0)
+      continue;
+    len += ret;
+  }
+  close(fd);
+/*写入文件 结束*/
 #if defined(__DEBUG__)
   PERR("count=%d\n", count);
   for (i = 0; i < count; i++) {
@@ -31,6 +55,8 @@ int SaveNetLinkReacvData(struct TupleMessage_t *data, int count) {
   }
 #endif
   return 0;
+open_file_err:
+  return ret;
 }
 void CTRL_C(int signum) {
   if (signum == SIGINT) {

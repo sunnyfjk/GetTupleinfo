@@ -2,7 +2,7 @@
  * @Author: fjk
  * @Date:   2018-05-18T14:47:17+08:00
  * @Last modified by:   fjk
- * @Last modified time: 2018-05-20T15:40:07+08:00
+ * @Last modified time: 2018-05-20T16:07:31+08:00
  */
 #include "../include/GetTuple.h"
 #include <errno.h>
@@ -15,13 +15,14 @@
 #include <sys/types.h>
 #include <unistd.h>
 struct PthreadControl_t {
+  const char *name;
   struct TupleMessage_t td[TUPLE_MESSAGE_DATA];
   int pos;
   pthread_mutex_t mutex;
   pthread_cond_t cond;
   pthread_t pd;
   int state;
-  int (*SaveNetLinkReacvData)(struct TupleMessage_t *, int);
+  int (*SaveNetLinkReacvData)(const char *, struct TupleMessage_t *, int);
 };
 void *SaveWork(void *arg) {
   struct PthreadControl_t *pc = (struct PthreadControl_t *)arg;
@@ -36,7 +37,7 @@ void *SaveWork(void *arg) {
     while (pc->state == STATE_RUN && pc->pos == 0)
       pthread_cond_wait(&pc->cond, &pc->mutex);
     if (pc->pos > 0 && pc->SaveNetLinkReacvData != NULL)
-      pc->SaveNetLinkReacvData(pc->td, pc->pos);
+      pc->SaveNetLinkReacvData(pc->name, pc->td, pc->pos);
     pc->pos = 0;
     pthread_cond_signal(&(pc->cond));
     if (pc->state == STATE_CLOSE) {
@@ -51,7 +52,8 @@ void *SaveWork(void *arg) {
   return arg;
 };
 struct PthreadControl_t *PthreadControlCreate(
-    int (*SaveNetLinkReacvData)(struct TupleMessage_t *, int)) {
+    const char *name,
+    int (*SaveNetLinkReacvData)(const char *, struct TupleMessage_t *, int)) {
   int ret = 0;
   struct PthreadControl_t *pc;
   pc = (struct PthreadControl_t *)malloc(sizeof(*pc));
@@ -59,6 +61,7 @@ struct PthreadControl_t *PthreadControlCreate(
     ret = -1;
     goto parameter_error;
   }
+  pc->name = name;
   pc->state = STATE_RUN;
   pc->pos = 0;
   pc->SaveNetLinkReacvData = SaveNetLinkReacvData;
@@ -100,6 +103,7 @@ int CreateNetLinkSocket(struct NetLinkSocket_t *ns) {
   int ret = 0;
   int i = 0, j = 0;
   struct sockaddr_nl addr = {0};
+  char name[100];
   if (ns == NULL) {
     ret = -1;
     goto parameter_error;
@@ -118,8 +122,12 @@ int CreateNetLinkSocket(struct NetLinkSocket_t *ns) {
   if (ret < 0) {
     goto netlink_bind_err;
   }
+  if (ns->name == NULL)
+    ns->name = "./Defaule";
   for (i = 0; i < PTHREAD_COND; i++) {
-    ns->cond[i] = PthreadControlCreate(ns->SaveNetLinkReacvData);
+    memset(name, 0, sizeof(name));
+    sprintf(name, "Tuple_%s_%d", ns->name, i);
+    ns->cond[i] = PthreadControlCreate(name, ns->SaveNetLinkReacvData);
     if (ns->cond[i] == NULL)
       goto PthreadControlCreate_err;
   }

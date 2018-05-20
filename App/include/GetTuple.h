@@ -2,7 +2,7 @@
  * @Author: fjk
  * @Date:   2018-05-18T14:47:11+08:00
  * @Last modified by:   fjk
- * @Last modified time: 2018-05-20T15:04:53+08:00
+ * @Last modified time: 2018-05-20T16:10:45+08:00
  */
 #ifndef __GET_TUPLE_H__
 #define __GET_TUPLE_H__
@@ -10,7 +10,7 @@
 #include <stdint.h>
 #define NETLINK_GET_TUPLE_GROUP (2)
 #define PTHREAD_COND (3)
-#define TUPLE_MESSAGE_DATA (5)
+#define TUPLE_MESSAGE_DATA (128)
 #define STATE_CLOSE (0)
 #define STATE_RUN (1)
 
@@ -32,7 +32,8 @@ struct NetLinkSocket_t {
   void *cond[PTHREAD_COND];
   int pos;
   int state;
-  int (*SaveNetLinkReacvData)(struct TupleMessage_t *, int);
+  const char *name;
+  int (*SaveNetLinkReacvData)(const char *, struct TupleMessage_t *, int);
 };
 int CreateNetLinkSocket(struct NetLinkSocket_t *ns);
 int ReacvNetLinkMessage(struct NetLinkSocket_t *ns);
