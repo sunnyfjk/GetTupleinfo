@@ -2,7 +2,7 @@
  * @Author: fjk
  * @Date:   2018-05-18T10:11:21+08:00
  * @Last modified by:   fjk
- * @Last modified time: 2018-05-20T12:42:14+08:00
+ * @Last modified time: 2018-05-20T17:34:58+08:00
  */
 #include "GetTuple.h"
 
@@ -44,6 +44,7 @@ unsigned int GetTuple_hookfn(void *priv, struct sk_buff *skb,
   tmsg.protocol = iph->protocol;
   tmsg.saddr = iph->saddr;
   tmsg.daddr = iph->daddr;
+  /*tcp协议和udp协议保存port的格式相同，不用区分协议，直接复制即可*/
   memcpy(&(tmsg.sport), skb_transport_header(skb), sizeof(uint16_t) * 2);
 #if defined(__DEBUG__)
   PDEBUG("protocol=%d,src[%pI4:%d],dst[%pI4:%d]\n", tmsg.protocol, &tmsg.saddr,

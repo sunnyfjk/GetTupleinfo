@@ -2,7 +2,7 @@
  * @Author: fjk
  * @Date:   2018-05-18T14:47:17+08:00
  * @Last modified by:   fjk
- * @Last modified time: 2018-05-20T16:23:26+08:00
+ * @Last modified time: 2018-05-20T17:33:05+08:00
  */
 #include "../include/GetTuple.h"
 #include <errno.h>
@@ -36,8 +36,10 @@ void *SaveWork(void *arg) {
     pthread_mutex_lock(&pc->mutex);
     while (pc->state == STATE_RUN && pc->pos == 0)
       pthread_cond_wait(&pc->cond, &pc->mutex);
-    if (pc->pos > 0 && pc->SaveNetLinkReacvData != NULL)
+    if (pc->pos > 0 && pc->SaveNetLinkReacvData != NULL) {
+      /*保存文件*/
       pc->SaveNetLinkReacvData(pc->name, pc->td, pc->pos);
+    }
     pc->pos = 0;
     pthread_cond_signal(&(pc->cond));
     if (pc->state == STATE_CLOSE) {
@@ -128,6 +130,7 @@ int CreateNetLinkSocket(struct NetLinkSocket_t *ns) {
   for (i = 0; i < PTHREAD_COND; i++) {
     memset(name, 0, sizeof(name));
     snprintf(name, MAX_NAME_LEN, "Tuple_%s_%d", ns->name, i);
+    /*每个线程单独保存一份name文件，但文件中的内容都不相同，也是为了提高文件保存的效率。*/
     ns->cond[i] = PthreadControlCreate(name, ns->SaveNetLinkReacvData);
     if (ns->cond[i] == NULL)
       goto PthreadControlCreate_err;
@@ -160,6 +163,7 @@ int ReacvNetLinkMessage(struct NetLinkSocket_t *ns) {
   while (ns->state == STATE_RUN) {
     memset(&src_addr, 0, sizeof(struct sockaddr_nl));
     memset(nlh, 0, NLMSG_SPACE(sizeof(struct TupleMessage_t)));
+    /*因为只需要接收数据，所以不需要I/O复用*/
     ret = recvfrom(ns->fd, nlh, NLMSG_SPACE(sizeof(struct TupleMessage_t)), 0,
                    (struct sockaddr *)&src_addr, (socklen_t *)&addrlen);
     if (ret < 0 ||
@@ -169,16 +173,19 @@ int ReacvNetLinkMessage(struct NetLinkSocket_t *ns) {
     pthread_mutex_lock(&(cond[ns->pos]->mutex));
     while (cond[ns->pos]->pos >= TUPLE_MESSAGE_DATA)
       pthread_cond_wait(&(cond[ns->pos]->cond), &(cond[ns->pos]->mutex));
+    /*将数据保存至缓存*/
     memcpy((unsigned char *)(&(cond[ns->pos]->td[cond[ns->pos]->pos])),
            NLMSG_DATA(nlh), nlh->nlmsg_len - NLMSG_SPACE(0));
     ret = 0;
     cond[ns->pos]->pos++;
     if (!(cond[ns->pos]->pos < TUPLE_MESSAGE_DATA)) {
+      /*缓存空间变满，通知线程保存文件*/
       ret = 1;
       pthread_cond_signal(&(cond[ns->pos]->cond));
     }
     pthread_mutex_unlock(&(cond[ns->pos]->mutex));
     if (ret == 1) {
+      /*当前缓存变满，切换缓存*/
       ns->pos++;
       if (!(ns->pos < PTHREAD_COND))
         ns->pos = 0;
